@@ -4,3 +4,7 @@ Shopkeeper - દુકાનદાર
 Dance - નૃત્ય કરવું
 Singer - ગાયક
 Daughter - પુત્રી
+Soil - માટી
+Pond - તળાવ
+Tea - ચા
+River - નદી

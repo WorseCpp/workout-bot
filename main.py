@@ -145,7 +145,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Use /set5k <time_in_mm:ss> and /setftp <number> to update stats.\n"
         "Use /stats to view current 5K and FTP stats.\n"
         "Use /guju to get today's Gujarati words and practice prompts.\n"
-        "Use /learned_guju to view learned Gujarati words."
+        "Use /vocab to view learned Gujarati words."
     )
 
 def get_workout_for_day(day_index: int) -> str:
@@ -230,17 +230,24 @@ async def setftp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except ValueError:
         await update.message.reply_text("⚠️ Invalid value. Please enter an integer.")
 
-def get_todays_words(unlearned, count=2):
-    random.seed(datetime.date.today().isoformat())
-    selected_words = random.sample(sorted(unlearned), min(2, len(unlearned)))
-    wrds = [f"{word.strip()}" for word in selected_words]
-    
+def stow_words(words):
     with open(GUJU_PATH + "learned.txt", "a") as f:
-        for word in selected_words:
+        for word in words:
             f.write(word.strip() + "\n")
 
-    words_msg = "\n".join(wrds)
-    return words_msg
+def get_todays_words(unlearned, count=2, offset = 0):
+    random.seed(5)
+    
+    unlearned = list(unlearned)
+    
+    random.shuffle(unlearned)
+    
+    start_index = ((datetime.date.today() - PLAN_START_DATE).days + offset) % len(unlearned)
+    selected_words = [unlearned[(start_index + i) % len(unlearned)] for i in range(min(count, len(unlearned)))]
+    
+    wrds = [f"{word.strip()}" for word in selected_words]
+
+    return wrds
 
 def get_todays_practice_words(learned, count=3):
     random.seed(datetime.date.today().isoformat())
@@ -287,7 +294,8 @@ async def auto_run_today(application, chat_id):
     
     # Randomly select 2 unlearned words *seed based on the current date*
     
-    words = get_todays_words(unl, 2)
+    words = "\n".join(get_todays_words(unl, 2))
+    stow(get_todays_words(unl, 2))
     
     await update.message.reply_text(
         f"📚 Today's Gujarati words to learn:\n{words}\n\n"
@@ -335,8 +343,12 @@ async def get_today_guju(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     # Randomly select 2 unlearned words *seed based on the current date*
-    words = get_todays_words(unl, 2)
-    
+    words = "Today:\n" + "\n".join(get_todays_words(unl, 2)) #todays words
+
+    for i in range(1, 7):
+        words += "\n" + f"\nDays ago: {i}\n" 
+        words += "\n".join(get_todays_words(unl, 2, offset = -i))  # words from the last week
+
     await update.message.reply_text(
         f"📚 Today's Gujarati words to learn:\n{words}\n\n"
     )
@@ -367,8 +379,10 @@ def main() -> None:
     application.add_handler(CommandHandler("stats", stats))
     application.add_handler(CommandHandler("set5k", set5k))
     application.add_handler(CommandHandler("setftp", setftp))
+    application.add_handler(CommandHandler("today", today))
+    application.add_handler(CommandHandler("tomorrow", tomorrow))
     # Learned words command
-    application.add_handler(CommandHandler("learned", learned_guju))
+    application.add_handler(CommandHandler("vocab", learned_guju))
     application.add_handler(CommandHandler("guju", get_today_guju))
 
     # Free-text time logger
