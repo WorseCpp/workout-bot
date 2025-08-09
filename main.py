@@ -140,9 +140,12 @@ def load_workout_plan():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("Chat =", update.effective_chat.id)
     await update.message.reply_text(
-        "👋 Welcome!\nUse /today or /tomorrow to view your workout.\n"
-        "Use /set5k <time_in_minutes> and /setftp <number> to update stats.\n"
-        "Use /stats to view current 5K and FTP stats."
+        "👋 Welcome!\n"
+        "Use /today or /tomorrow to view your workout.\n"
+        "Use /set5k <time_in_mm:ss> and /setftp <number> to update stats.\n"
+        "Use /stats to view current 5K and FTP stats.\n"
+        "Use /guju to get today's Gujarati words and practice prompts.\n"
+        "Use /learned_guju to view learned Gujarati words."
     )
 
 def get_workout_for_day(day_index: int) -> str:
