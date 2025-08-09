@@ -7,7 +7,7 @@ import datetime
 import re
 import os
 import json
-
+import random
 
 from datetime import timedelta
 
@@ -15,6 +15,28 @@ import datetime
 
 AUTO_CHAT_ID = ""  # Set your chat/user ID here, or detect from first /start
 TODAY_SENT_LOG = "today_sent.log"
+
+GUJU_PATH = 'guju/'
+
+def load_vocab():
+    if not os.path.exists(GUJU_PATH + "vocab.txt"):
+        return set()
+    
+    words = open(GUJU_PATH + "vocab.txt", "r").readlines()
+        
+    return set(words)
+
+def load_learned():
+    if not os.path.exists(GUJU_PATH + "learned.txt"):
+        return set()
+
+    return set(open(GUJU_PATH + "learned.txt", "r").readlines())
+
+def append_to_learned(new_words):
+    with open("learned.txt", "a") as f:
+        for word in new_words:
+            f.write(f"{word['english']},{word['gujarati']}\n")
+
 
 def has_sent_today_auto():
     today_str = datetime.date.today().isoformat()
@@ -29,23 +51,6 @@ def mark_sent_today_auto():
     with open(TODAY_SENT_LOG, "a") as f:
         f.write(today_str + "\n")
 
-async def auto_send_today_workout(context: ContextTypes.DEFAULT_TYPE):
-    #if has_sent_today_auto():
-    #    return  # Already sent
-    
-    current_date = datetime.date.today()
-    days_since_start = (current_date - PLAN_START_DATE).days
-    day = days_since_start % 28
-    workout = get_workout_for_day(day)
-    
-    chat_id = AUTO_CHAT_ID  # Replace with your Telegram user/chat ID
-
-    if chat_id:
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text=f"📅 Auto Today's Workout (Cycle Day {day + 1}/28, {current_date.strftime('%A')}): {workout}"
-        )
-        mark_sent_today_auto()
 
 PLAN_START_DATE = datetime.date(2025, 7, 20)  # Starting Sunday, July 20, 2025
 
@@ -222,6 +227,33 @@ async def setftp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except ValueError:
         await update.message.reply_text("⚠️ Invalid value. Please enter an integer.")
 
+def get_todays_words(unlearned, count=2):
+    random.seed(datetime.date.today().isoformat())
+    selected_words = random.sample(sorted(unlearned), min(2, len(unlearned)))
+    wrds = [f"{word.strip()}" for word in selected_words]
+    
+    with open(GUJU_PATH + "learned.txt", "a") as f:
+        for word in selected_words:
+            f.write(word.strip() + "\n")
+
+    words_msg = "\n".join(wrds)
+    return words_msg
+
+def get_todays_practice_words(learned, count=3):
+    random.seed(datetime.date.today().isoformat())
+    learned_list = list(learned)
+    practice_words = random.sample(sorted(learned_list), min(count, len(learned_list)))
+    practice_prompts = []
+    for entry in practice_words:
+        parts = entry.strip().split(' - ')
+        if len(parts) != 2:
+            continue
+        if random.randint(0, 1) == 0:
+            practice_prompts.append(f"Translate to Gujarati: {parts[0].strip()}")
+        else:
+            practice_prompts.append(f"Translate to English: {parts[1].strip()}")
+    return practice_prompts
+
 async def auto_run_today(application, chat_id):
     if has_sent_today_auto():
         return
@@ -229,6 +261,7 @@ async def auto_run_today(application, chat_id):
     class AutoContext:
         chat_id = AUTO_CHAT_ID
     from types import SimpleNamespace
+
     # Build a minimal Update-like object
     update = SimpleNamespace(
         effective_chat=SimpleNamespace(id=chat_id),
@@ -236,9 +269,85 @@ async def auto_run_today(application, chat_id):
             reply_text=lambda msg: application.bot.send_message(chat_id=chat_id, text=msg)
         ),
     )
+    
     context = SimpleNamespace()
     await today(update, context)
     mark_sent_today_auto()
+
+    voc = load_vocab()
+    lrn = load_learned()
+    unl = voc - lrn
+
+    if not unl:
+        await update.message.reply_text("✅ All words learned! No new words to practice today.")
+        return
+    
+    # Randomly select 2 unlearned words *seed based on the current date*
+    
+    words = get_todays_words(unl, 2)
+    
+    await update.message.reply_text(
+        f"📚 Today's Gujarati words to learn:\n{words}\n\n"
+    )
+
+    learned_list = list(lrn)
+
+    if learned_list:
+        
+        practice_prompts = get_todays_practice_words(learned_list, 3)
+
+        if practice_prompts:
+            await update.message.reply_text(
+                "🔄 Word Practice:\n" + "\n".join(practice_prompts)
+            )
+
+    if datetime.date.today().weekday() == 5:
+        try:
+            with open(GUJU_PATH + "grammar.txt", "r") as gf:
+                grammar_lesson = gf.read()
+        except FileNotFoundError:
+            grammar_lesson = "Grammar lesson file not found."
+
+        grammar_lesson = grammar_lesson.split("\n\n")
+
+        grammar_lesson = random.choice(grammar_lesson).strip()
+
+        await update.message.reply_text(f"📖 {grammar_lesson}")
+
+async def learned_guju(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    learned_words = load_learned()
+    if not learned_words:
+        await update.message.reply_text("No learned words found.")
+    else:
+        msg = "Learned Gujarati Words:\n" + "\n".join(sorted(learned_words))
+        await update.message.reply_text(msg)
+
+async def get_today_guju(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    voc = load_vocab()
+    lrn = load_learned()
+    unl = voc - lrn
+
+    if not unl:
+        await update.message.reply_text("✅ All words learned! No new words to practice today.")
+        return
+    
+    # Randomly select 2 unlearned words *seed based on the current date*
+    words = get_todays_words(unl, 2)
+    
+    await update.message.reply_text(
+        f"📚 Today's Gujarati words to learn:\n{words}\n\n"
+    )
+
+    learned_list = list(lrn)
+
+    if learned_list:
+        
+        practice_prompts = get_todays_practice_words(learned_list, 3)
+
+        if practice_prompts:
+            await update.message.reply_text(
+                "🔄 Word Practice:\n" + "\n".join(practice_prompts)
+            )
 
 def main() -> None:
     if len(sys.argv) != 3:
@@ -251,13 +360,13 @@ def main() -> None:
 
     # Workouts
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("today", today))
-    application.add_handler(CommandHandler("tomorrow", tomorrow))
-
     # Stats commands
     application.add_handler(CommandHandler("stats", stats))
     application.add_handler(CommandHandler("set5k", set5k))
     application.add_handler(CommandHandler("setftp", setftp))
+    # Learned words command
+    application.add_handler(CommandHandler("learned", learned_guju))
+    application.add_handler(CommandHandler("guju", get_today_guju))
 
     # Free-text time logger
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, catch_all))
@@ -270,4 +379,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+
     main()
