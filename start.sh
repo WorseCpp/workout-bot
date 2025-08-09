@@ -1,3 +1,3 @@
 #!/bin/sh
 
-python3 main.py "$TOKEN" "$CHATID"
+python3 main.py "$TOKEN" "$CHAT_ID"
