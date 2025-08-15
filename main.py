@@ -15,8 +15,163 @@ import datetime
 
 AUTO_CHAT_ID = ""  # Set your chat/user ID here, or detect from first /start
 TODAY_SENT_LOG = "today_sent.log"
-
 GUJU_PATH = 'guju/'
+BUDGET = "budget/"
+TODO = "todo/"
+DIET = "diet/"
+
+def load_spent():
+    if not os.path.exists(BUDGET + "budget.txt"):
+        return {}
+    
+    budget_data = {}
+    with open(BUDGET + "budget.txt", "r") as f:
+        for line in f:
+            parts = line.strip().split(',')
+            if len(parts) == 2:
+                budget_data[parts[0].strip()] = float(parts[1].strip())
+    
+    return budget_data
+
+def save_spent(budget_data):
+    with open(BUDGET + "budget.txt", "w") as f:
+        for category, amount in budget_data.items():
+            f.write(f"{category},{amount}\n")
+
+async def add_spent(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if len(context.args) != 2:
+        await update.message.reply_text("Usage: /add_spent <category> <amount>")
+        return
+    
+    category = context.args[0].strip()
+    try:
+        amount = float(context.args[1].strip())
+    except ValueError:
+        await update.message.reply_text("⚠️ Invalid amount. Please enter a number.")
+        return
+    
+    budget_data = load_spent()
+    
+    if category in budget_data:
+        budget_data[category] += amount
+    else:
+        budget_data[category] = amount
+    
+    save_spent(budget_data)
+    await update.message.reply_text(f"✅ Added {amount} to {category}.")
+
+async def show_spent(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    budget_data = load_spent()
+    if not budget_data:
+        await update.message.reply_text("No budget data found.")
+        return
+    
+    msg = "📊 Budget Spent:\n"
+    for category, amount in budget_data.items():
+        msg += f"• {category}: ${amount:.2f}\n"
+    
+    await update.message.reply_text(msg)
+
+def load_todo():
+    if not os.path.exists(TODO + "todo.txt"):
+        return []
+    
+    with open(TODO + "todo.txt", "r") as f:
+        todos = [line.strip() for line in f.readlines() if line.strip()]
+    
+    return todos
+
+def save_todo(todos):
+    with open(TODO + "todo.txt", "w") as f:
+        for todo in todos:
+            f.write(todo.strip() + "\n")
+
+async def add_todo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("Usage: /add_todo <task>")
+        return
+    
+    todo_item = " ".join(context.args)
+    todos = load_todo()
+    
+    if todo_item not in todos:
+        todos.append(todo_item)
+        save_todo(todos)
+        await update.message.reply_text(f"✅ Added todo item: {todo_item}")
+    else:
+        await update.message.reply_text(f"❌ Todo item '{todo_item}' already exists.")
+
+async def finish_todo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("Usage: /finish_todo <task number>")
+        return
+    
+    try:
+        task_number = int(context.args[0]) - 1
+        todos = load_todo()
+        
+        if 0 <= task_number < len(todos):
+            removed_item = todos.pop(task_number)
+            save_todo(todos)
+            await update.message.reply_text(f"✅ Removed todo item: {removed_item}")
+        else:
+            await update.message.reply_text("❌ Invalid task number.")
+    except ValueError:
+        await update.message.reply_text("⚠️ Please provide a valid task number.")
+
+async def show_todos(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    todos = load_todo()
+    if not todos:
+        await update.message.reply_text("No todo items found.")
+    else:
+        msg = "📝 Todo List:\n" + "\n".join(f"{i + 1}. {todo}" for i, todo in enumerate(todos))
+        await update.message.reply_text(msg)
+
+def get_week_label():
+    today = datetime.date.today()
+    start_of_week = today - datetime.timedelta(days=today.weekday())  # Monday of the current week
+    end_of_week = start_of_week + datetime.timedelta(days=6)  # Sunday of the current week
+    return f"{start_of_week.isoformat()}_to_{end_of_week.isoformat()}"
+
+def load_diet():
+    week_label = get_week_label()
+    diet_file = DIET + f"diet_{week_label}.txt"
+    if not os.path.exists(diet_file):
+        return {}
+    
+    diet_items = {}
+    with open(diet_file, "r") as f:
+        for line in f:
+            parts = line.strip().split(',')
+            if len(parts) == 2:
+                item, count = parts[0].strip(), int(parts[1].strip())
+                diet_items[item] = count
+    
+    return diet_items
+
+def save_diet(diet_items):
+    week_label = get_week_label()
+    diet_file = DIET + f"diet_{week_label}.txt"
+    with open(diet_file, "w") as f:
+        for item, count in diet_items.items():
+            f.write(f"{item},{count}\n")
+
+def last_week_label():
+    today = datetime.date.today()
+    start_of_week = today - datetime.timedelta(days=today.weekday() + 7)  # Monday of the last week
+    end_of_week = start_of_week + datetime.timedelta(days=6)  # Sunday of the last week
+    return f"{start_of_week.isoformat()}_to_{end_of_week.isoformat()}"
+
+def load_last_week_diet():
+    week_label = last_week_label()
+    diet_file = DIET + f"diet_{week_label}.txt"
+    if not os.path.exists(diet_file):
+        return []
+    
+    with open(diet_file, "r") as f:
+        diet_items = [line.strip() for line in f.readlines() if line.strip()]
+    
+    return diet_items
 
 def load_vocab():
     if not os.path.exists(GUJU_PATH + "vocab.txt"):
@@ -145,7 +300,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Use /set5k <time_in_mm:ss> and /setftp <number> to update stats.\n"
         "Use /stats to view current 5K and FTP stats.\n"
         "Use /guju to get today's Gujarati words and practice prompts.\n"
-        "Use /vocab to view learned Gujarati words."
+        "Use /vocab to view learned Gujarati words.\n"
+        "Use /add_diet <item>, /remove_diet <item>, and /get_diet to manage your diet.\n"
+        "Use /add_spent <category> <amount> and /show_spent to manage your budget.\n"
+        "Use /add_todo <task>, /finish_todo <task number>, and /show_todos to manage your todo list."
     )
 
 def get_workout_for_day(day_index: int) -> str:
@@ -162,8 +320,6 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"📅 Today's Workout (Cycle Day {day + 1}/28, {current_date.strftime('%A')}): {workout}"
     )
-
-
 
 
 async def tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -264,66 +420,6 @@ def get_todays_practice_words(learned, count=3):
             practice_prompts.append(f"Translate to English: {parts[1].strip()}")
     return practice_prompts
 
-async def auto_run_today(application, chat_id):
-    if has_sent_today_auto():
-        return
-    # Fake a minimal Update/Context for today()
-    class AutoContext:
-        chat_id = AUTO_CHAT_ID
-    from types import SimpleNamespace
-
-    # Build a minimal Update-like object
-    update = SimpleNamespace(
-        effective_chat=SimpleNamespace(id=chat_id),
-        message=SimpleNamespace(
-            reply_text=lambda msg: application.bot.send_message(chat_id=chat_id, text=msg)
-        ),
-    )
-    
-    context = SimpleNamespace()
-    await today(update, context)
-    mark_sent_today_auto()
-
-    voc = load_vocab()
-    lrn = load_learned()
-    unl = voc - lrn
-
-    if not unl:
-        await update.message.reply_text("✅ All words learned! No new words to practice today.")
-        return
-    
-    # Randomly select 2 unlearned words *seed based on the current date*
-    
-    words = "\n".join(get_todays_words(unl, 2))
-    stow(get_todays_words(unl, 2))
-    
-    await update.message.reply_text(
-        f"📚 Today's Gujarati words to learn:\n{words}\n\n"
-    )
-
-    learned_list = list(lrn)
-
-    if learned_list:
-        
-        practice_prompts = get_todays_practice_words(learned_list, 3)
-
-        if practice_prompts:
-            await update.message.reply_text(
-                "🔄 Word Practice:\n" + "\n".join(practice_prompts)
-            )
-
-    if datetime.date.today().weekday() == 5:
-        try:
-            with open(GUJU_PATH + "grammar.txt", "r") as gf:
-                grammar_lesson = gf.read()
-        except FileNotFoundError:
-            grammar_lesson = "Grammar lesson file not found."
-
-        grammar_lesson = grammar_lesson.split("\n\n")
-
-        grammar_lesson = random.choice(grammar_lesson).strip()
-
-        await update.message.reply_text(f"📖 {grammar_lesson}")
 
 async def learned_guju(update: Update, context: ContextTypes.DEFAULT_TYPE):
     learned_words = load_learned()
@@ -364,6 +460,50 @@ async def get_today_guju(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "🔄 Word Practice:\n" + "\n".join(practice_prompts)
             )
 
+async def get_diet(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    diet_items = load_diet()
+    if not diet_items:
+        await update.message.reply_text("No diet items added for this week.")
+    else:
+        msg = "Diet Items for this week:\n" + "\n".join([f"{item}: {count}" for item, count in diet_items.items()])
+        await update.message.reply_text(msg)
+
+async def add_diet(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("Usage: /add_diet <item>")
+        return
+
+    diet_item = " ".join(context.args)
+    diet_items = load_diet()
+
+    if not diet_items:
+        diet_items = {}
+
+    if diet_item not in diet_items:
+        diet_items[diet_item] = 1
+    else:
+        diet_items[diet_item] += 1
+
+    save_diet(diet_items)
+    await update.message.reply_text(f"✅ Added diet item: {diet_item}")
+
+async def remove_diet(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("Usage: /remove_diet <item>")
+        return
+
+    diet_item = " ".join(context.args)
+    diet_items = load_diet()
+
+    if diet_item in diet_items:
+        del diet_items[diet_item]
+        save_diet(diet_items)
+        await update.message.reply_text(f"✅ Removed diet item: {diet_item}")
+    else:
+        await update.message.reply_text(f"❌ Diet item '{diet_item}' not found.")
+
+
+
 def main() -> None:
     if len(sys.argv) != 3:
         print("Usage: python main.py <TOKEN> <CHATID>")
@@ -385,14 +525,26 @@ def main() -> None:
     application.add_handler(CommandHandler("vocab", learned_guju))
     application.add_handler(CommandHandler("guju", get_today_guju))
 
+    # Budget commands
+    
+    application.add_handler(CommandHandler("show_spent", show_spent))
+    application.add_handler(CommandHandler("add_spent", add_spent))
+
+    # Diet commands
+    application.add_handler(CommandHandler("get_diet", get_diet))
+    application.add_handler(CommandHandler("add_diet", add_diet))
+    application.add_handler(CommandHandler("remove_diet", remove_diet))
+
+    # Todo commands
+    application.add_handler(CommandHandler("add_todo", add_todo))
+    application.add_handler(CommandHandler("finish_todo", finish_todo))
+    application.add_handler(CommandHandler("show_todos", show_todos))
+
     # Free-text time logger
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, catch_all))
 
-    async def post_init_hook(app):
-        await auto_run_today(app, AUTO_CHAT_ID)
-
-    application.post_init = post_init_hook
     application.run_polling()
+
 
 
 if __name__ == "__main__":
